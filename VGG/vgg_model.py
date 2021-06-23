@@ -10,8 +10,8 @@ from utils import *
 
 
 class VGG(nn.Module):
-    def __int__(self, input_channels, output_channels):
-        super(VGG, self).__int__()
+    def __init__(self, input_channels, output_channels):
+        super(VGG, self).__init__()
         # 3 * 224 * 224
         self.conv1_1 = nn.Conv2d(input_channels, 64, kernel_size=3, padding=1)  # 64 * 224 * 224
         self.conv1_2 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
@@ -63,8 +63,10 @@ class VGG(nn.Module):
         x = self.maxpool5(x)
 
         x = x.view(x.size(0), -1)  # 展平
-        x = x.relu(self.fc1(x))
-        x = x.relu(self.fc2(x))
+        x = F.relu(self.fc1(x))
+        x = F.dropout(x, 0.5)
+        x = F.relu(self.fc2(x))
+        x = F.dropout(x, 0.5)
         x = self.fc3(x)
         x = F.softmax(x, dim=1)  # 用了softmax就得用softmax with cross-entropy loss
         return x
@@ -109,7 +111,7 @@ class SeqVgg(nn.Module):
         return self.net(x)
 
 
-list = [1, 2, 3]
-print(list)
 # vgg = SeqVgg().net
 # summary(vgg)
+vgg = VGG(1, 10)
+print(vgg)
