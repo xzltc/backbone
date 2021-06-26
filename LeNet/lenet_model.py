@@ -45,13 +45,13 @@ class LeNet(nn.Module):
         return x
 
 
-class LetNetSeq(nn.Module):
+class LeNetSeq(nn.Module):
     """
     sequential构造的LeNet网络
     """
 
     def __init__(self):
-        super(LetNetSeq, self).__init__()
+        super(LeNetSeq, self).__init__()
         self.net = nn.Sequential(
             Reshape(),
             nn.Conv2d(1, 6, kernel_size=5, padding=2), nn.ReLU(inplace=True),

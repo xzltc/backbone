@@ -25,6 +25,11 @@ def try_gpu(i=0):
     return torch.device('cpu')
 
 
+def get_dataloader_workers():
+    """Use 4 processes to read the data."""
+    return 4
+
+
 def use_svg_display():
     """Use the svg format to display a plot in Jupyter."""
     display.set_matplotlib_formats('svg')
@@ -127,8 +132,8 @@ class Animator:
         for x, y, fmt in zip(self.X, self.Y, self.fmts):
             self.axes[0].plot(x, y, fmt)
         self.config_axes()
-        display.display(self.fig)
-        display.clear_output(wait=True)
+        # display.display(self.fig)
+        # display.clear_output(wait=True)
 
     def show_plot(self):
         """因为plot只能显示一次，所以在结束时添加显示操作 """
@@ -143,14 +148,13 @@ def summary(net):
 
     x = torch.rand(size=(1, 1, 32, 32), dtype=torch.float32)  # lenet
     x = torch.rand(size=(1, 1, 227, 227), dtype=torch.float32)  # alexnet
-    x = torch.rand(size=(1, 1, 224, 224), dtype=torch.float32)  # alexnet
     for layer in net:
         x = layer(x)
         print(layer.__class__.__name__, "output shape: \t", x.shape)
 
 
 def accuracy(y_hat, y):
-    """计算当前的y_hat和y的精确度"""
+    """Compute the number of correct predictions."""
     if len(y_hat.shape) > 1 and y_hat.shape[1] > 1:
         y_hat = argmax(y_hat, axis=1)
     cmp = astype(y_hat, y.dtype) == y
@@ -198,7 +202,8 @@ def train_ch6(net, train_iter, test_iter, num_epochs, lr, device):
     loss = nn.CrossEntropyLoss()  # 交叉熵loss 多类分类问题
     animator = Animator(xlabel='epoch', xlim=[1, num_epochs],
                         legend=['train loss', 'train acc', 'test acc'])
-    timer, num_batches = Timer(), len(train_iter)  # 初始化时间，train_iter?
+    t_time, timer, num_batches = Timer(), Timer(), len(train_iter)  # 初始化时间，train_iter?
+    t_time.start()  # 验证整个训练执行的总时间
     for epoch in range(num_epochs):
         # Sum of training loss, sum of training accuracy, no. of examples
         metric = Accumulator(3)
@@ -212,7 +217,6 @@ def train_ch6(net, train_iter, test_iter, num_epochs, lr, device):
             l.backward()
             optimizer.step()
             with torch.no_grad():
-                # 0:l*batch=这批数据的总loss 1:这批batch精确度 2:处理的总sample
                 metric.add(l * X.shape[0], accuracy(y_hat, y), X.shape[0])
             timer.stop()
             train_l = metric[0] / metric[2]
@@ -220,20 +224,27 @@ def train_ch6(net, train_iter, test_iter, num_epochs, lr, device):
             if (i + 1) % (num_batches // 5) == 0 or i == num_batches - 1:
                 animator.add(epoch + (i + 1) / num_batches,
                              (train_l, train_acc, None))
-                print("add loss:", l.item())  # .item()一个元素tensor可以得到元素值
+                print('e:', epoch + 1, "- add loss:", train_l)  # .item()一个元素tensor可以得到元素值
+                # print(f'current loss {train_l:.3f}')
+                print(timer.avg())
         # 每次结束验证集的测试
         test_acc = evaluate_accuracy_gpu(net, test_iter)
         animator.add(epoch + 1, (None, None, test_acc))
+    t_time.stop()
     animator.show_plot()
     print(f'loss {train_l:.3f}, train acc {train_acc:.3f}, '
           f'test acc {test_acc:.3f}')
     print(f'{metric[2] * num_epochs / timer.sum():.1f} examples/sec '
-          f'on {str(device)}')
+          f'on {str(device)} all time {t_time.sum()}')
 
 
 def load_data_fashion_mnist(path, batch_size, resize=None, download=False):
     """下载数据集并加载到dataloader实现复用的操作"""
-    trans = [transforms.ToTensor(), ]  # 对传入的图像先做一个ToTensor()的操作
+    trans = [transforms.ToTensor(),
+             transforms.RandomHorizontalFlip(),
+             transforms.RandomVerticalFlip(),
+             transforms.RandomAutocontrast()
+             ]  # 对传入的图像先做一个ToTensor()的操作
     # 如果需要resize，则传入参数
     if resize:
         trans.insert(0, transforms.Resize(resize))
@@ -249,8 +260,61 @@ def load_data_fashion_mnist(path, batch_size, resize=None, download=False):
                                                    download=download)
     # (train dataloader,test dataloader)
     return (data.DataLoader(mnist_train, batch_size, shuffle=True,
-                            num_workers=1),
+                            num_workers=get_dataloader_workers()),
             data.DataLoader(mnist_test, batch_size, shuffle=False,
+                            num_workers=get_dataloader_workers()))
+
+
+def load_data_mnist(path, batch_size, resize=None, download=False):
+    """下载数据集并加载到dataloader实现复用的操作"""
+    trans = [transforms.ToTensor(),
+             transforms.RandomHorizontalFlip(),  # 随机水平翻转
+             transforms.RandomVerticalFlip(),  # 随机垂直翻转
+             ]
+    # 如果需要resize，则传入参数
+    if resize:
+        trans.insert(0, transforms.Resize(resize))
+    trans = transforms.Compose(trans)
+    mnist_train = torchvision.datasets.MNIST(root=path,
+                                             train=True,
+                                             transform=trans,
+                                             download=download)
+    mnist_test = torchvision.datasets.MNIST(root=path,
+                                            train=False,
+                                            transform=trans,
+                                            download=download)
+    # (train dataloader,test dataloader)
+    return (data.DataLoader(mnist_train, batch_size, shuffle=True,
+                            num_workers=get_dataloader_workers()),
+            data.DataLoader(mnist_test, batch_size, shuffle=False,
+                            num_workers=get_dataloader_workers()))
+
+
+def load_data_cifar_10(path, batch_size, resize=None, download=False):
+    """下载数据集并加载到dataloader实现复用的操作"""
+    trans = [transforms.ToTensor(),
+             # transforms.RandomHorizontalFlip(),
+             # transforms.RandomVerticalFlip(),
+             # transforms.ColorJitter(brightness=0.5),
+             # transforms.ColorJitter(contrast=0.5),
+             # transforms.ColorJitter(hue=0.5)
+             ]  # 对传入的图像先做一个ToTensor()的操作
+    # 如果需要resize，则传入参数
+    if resize:
+        trans.insert(0, transforms.Resize(resize))
+    trans = transforms.Compose(trans)
+    CIFAR10_train = torchvision.datasets.CIFAR10(root=path,
+                                                 train=True,
+                                                 transform=trans,
+                                                 download=download)
+    CIFAR10_test = torchvision.datasets.CIFAR10(root=path,
+                                                train=False,
+                                                transform=trans,
+                                                download=download)
+    # (train dataloader,test dataloader)
+    return (data.DataLoader(CIFAR10_train, batch_size, shuffle=True,
+                            num_workers=1),
+            data.DataLoader(CIFAR10_test, batch_size, shuffle=False,
                             num_workers=1))
 
 
