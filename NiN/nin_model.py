@@ -12,19 +12,19 @@ from torch.nn import functional as F
 class NiN(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(NiN, self).__init__()
-        self.conv1_1 = nn.Conv2d(in_channels, 96, kernel_size=11, strides=4, padding=0),
+        self.conv1_1 = nn.Conv2d(in_channels, 96, kernel_size=11, stride=4, padding=0),
         self.conv1_2 = nn.Conv2d(96, 96, kernel_size=1)
         self.conv1_3 = nn.Conv2d(96, 96, kernel_size=1)
 
-        self.conv2_1 = nn.Conv2d(96, 256, kernel_size=5, strides=1, padding=2),
+        self.conv2_1 = nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2),
         self.conv2_2 = nn.Conv2d(256, 256, kernel_size=1)
         self.conv2_3 = nn.Conv2d(256, 256, kernel_size=1)
 
-        self.conv3_1 = nn.Conv2d(256, 384, kernel_size=3, strides=1, padding=1),
+        self.conv3_1 = nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1),
         self.conv3_2 = nn.Conv2d(384, 384, kernel_size=1)
         self.conv3_3 = nn.Conv2d(384, 384, kernel_size=1)
 
-        self.conv4_1 = nn.Conv2d(384, out_channels, kernel_size=3, strides=1, padding=1),
+        self.conv4_1 = nn.Conv2d(384, out_channels, kernel_size=3, stride=1, padding=1),
         self.conv4_2 = nn.Conv2d(out_channels, out_channels, kernel_size=1)
         self.conv4_3 = nn.Conv2d(out_channels, out_channels, kernel_size=1)
 
