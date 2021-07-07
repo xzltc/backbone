@@ -14,6 +14,8 @@ from IPython import display
 from matplotlib import pyplot as plt
 from torchvision import transforms
 from torch.utils import data
+from torch.optim.lr_scheduler import *
+from torchvision.models import AlexNet
 
 utils = sys.modules[__name__]
 
@@ -140,21 +142,22 @@ class Animator:
         plt.show()
 
 
-def summary(net):
+def summary(net, x):
     """
     打印Sequence模型中每一层的情况
     :param net: model
     """
 
-    x = torch.rand(size=(1, 1, 32, 32), dtype=torch.float32)  # lenet
-    x = torch.rand(size=(1, 1, 227, 227), dtype=torch.float32)  # alexnet
+    # x = torch.rand(size=(1, 1, 32, 32), dtype=torch.float32)  # lenet
+    # x = torch.rand(size=(1, 1, 227, 227), dtype=torch.float32)  # alexnet
+    # X = torch.rand(size=(1, 1, 96, 96)) # googlenet
     for layer in net:
         x = layer(x)
         print(layer.__class__.__name__, "output shape: \t", x.shape)
 
 
 def accuracy(y_hat, y):
-    """Compute the number of correct predictions."""
+    """计算预测精确度"""
     if len(y_hat.shape) > 1 and y_hat.shape[1] > 1:
         y_hat = argmax(y_hat, axis=1)
     cmp = astype(y_hat, y.dtype) == y
@@ -163,7 +166,7 @@ def accuracy(y_hat, y):
 
 def evaluate_accuracy_gpu(net, data_iter, device=None):
     """
-    衡量精确度
+    在gpu上衡量精确度
     :param net: model
     :param data_iter:
     :param device: cpu or gpu
@@ -241,9 +244,9 @@ def train_ch6(net, train_iter, test_iter, num_epochs, lr, device):
 def load_data_fashion_mnist(path, batch_size, resize=None, download=False):
     """下载数据集并加载到dataloader实现复用的操作"""
     trans = [transforms.ToTensor(),
-             transforms.RandomHorizontalFlip(),
-             transforms.RandomVerticalFlip(),
-             transforms.RandomAutocontrast()
+             # transforms.RandomHorizontalFlip(),
+             # transforms.RandomVerticalFlip(),
+             # transforms.RandomAutocontrast()
              ]  # 对传入的图像先做一个ToTensor()的操作
     # 如果需要resize，则传入参数
     if resize:
@@ -316,6 +319,113 @@ def load_data_cifar_10(path, batch_size, resize=None, download=False):
                             num_workers=1),
             data.DataLoader(CIFAR10_test, batch_size, shuffle=False,
                             num_workers=1))
+
+
+def cosine_annealing():
+    """余弦退火学习率(Cosine Annealing LR)"""
+    model = AlexNet()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.1)
+    scheduler = CosineAnnealingLR(optimizer, T_max=20)
+    plt.figure()
+    x = list(range(100))
+    y = []
+    for epoch in range(1, 101):
+        optimizer.zero_grad()
+        optimizer.step()
+        print("第%d个epoch的学习率：%f" % (epoch, optimizer.param_groups[0]['lr']))
+        scheduler.step()
+        y.append(scheduler.get_lr()[0])
+
+    # 画出lr的变化
+    plt.plot(x, y)
+    plt.xlabel("epoch")
+    plt.ylabel("lr")
+    plt.title("learning rate's curve changes as epoch goes on!")
+    plt.show()
+
+
+def manual_step():
+    """手动阶梯式lr"""
+    model = AlexNet()
+    LR = 0.01
+    optimizer = torch.optim.SGD(model.parameters(), lr=LR)
+    lr_list = []
+    for epoch in range(100):
+        if epoch % 5 == 0:  # 每5个epoch下降0.9
+            for p in optimizer.param_groups:
+                p['lr'] *= 0.9
+                print(p['lr'])
+        lr_list.append(optimizer.state_dict()['param_groups'][0]['lr'])
+    plt.plot(range(100), lr_list, color='r')
+    plt.xlabel("epoch")
+    plt.ylabel("lr")
+    plt.show()
+
+
+def lambda_step():
+    """lamdba表达式下降学习率"""
+    lr_list = []
+    model = AlexNet()
+    LR = 0.01
+    optimizer = torch.optim.SGD(model.parameters(), lr=LR)
+    lambda1 = lambda epoch: np.sin(epoch) / epoch
+    scheduler = LambdaLR(optimizer, lr_lambda=lambda1)
+    for epoch in range(100):
+        scheduler.step()
+        lr_list.append(optimizer.state_dict()['param_groups'][0]['lr'])
+    plt.plot(range(100), lr_list, color='r')
+    plt.xlabel("epoch")
+    plt.ylabel("lr")
+    plt.show()
+
+
+def step_lr():
+    """每个一定的epoch，lr会自动乘以gamma"""
+    lr_list = []
+    model = AlexNet()
+    LR = 0.01
+    optimizer = torch.optim.SGD(model.parameters(), lr=LR)
+    scheduler = StepLR(optimizer, step_size=5, gamma=0.8)
+    for epoch in range(100):
+        scheduler.step()
+        lr_list.append(optimizer.state_dict()['param_groups'][0]['lr'])
+    plt.plot(range(100), lr_list, color='r')
+    plt.xlabel("epoch")
+    plt.ylabel("lr")
+    plt.show()
+
+
+def multi_step():
+    """三段式lr，epoch进入milestones范围内即乘以gamma，离开milestones范围之后再乘以gamma
+    这种衰减方式也是在学术论文中最常见的方式，一般手动调整也会采用这种方法"""
+    lr_list = []
+    model = AlexNet()
+    LR = 0.01
+    optimizer = torch.optim.SGD(model.parameters(), lr=LR)
+    scheduler = MultiStepLR(optimizer, milestones=[5, 20, 80], gamma=0.9)
+    for epoch in range(100):
+        scheduler.step()
+        lr_list.append(optimizer.state_dict()['param_groups'][0]['lr'])
+    plt.plot(range(100), lr_list, color='r')
+    plt.xlabel("epoch")
+    plt.ylabel("lr")
+    plt.show()
+
+
+def exponential_step():
+    """指数级衰减的lr"""
+    lr_list = []
+    model = AlexNet()
+    LR = 0.01
+    optimizer = torch.optim.SGD(model.parameters(), lr=LR)
+    scheduler = ExponentialLR(optimizer, gamma=0.9)
+    for epoch in range(100):
+        scheduler.step()
+        lr_list.append(optimizer.state_dict()['param_groups'][0]['lr'])
+    plt.plot(range(100), lr_list, color='r')
+    plt.xlabel("epoch")
+    plt.ylabel("lr")
+    plt.show()
 
 
 reduce_sum = lambda x, *args, **kwargs: x.sum(*args, **kwargs)
